@@ -1,0 +1,119 @@
+#!/usr/bin/env python
+from __future__ import print_function
+import subprocess
+import optparse
+import time
+import sys
+import os
+import glob
+try:
+    # We don't actually need typing, but it's a good guard for being
+    # outside a Zulip virtualenv.
+    from typing import Iterable
+    import requests
+except ImportError as e:
+    print("ImportError: {}".format(e))
+    print("You need to run the Zulip tests inside a Zulip dev environment.")
+    print("If you are using Vagrant, you can `vagrant ssh` to enter the Vagrant guest.")
+    sys.exit(1)
+
+#
+# In order to use remote casperjs debugging, pass the --remote-debug flag
+# This will start a remote debugging session listening on port 7777
+#
+# See https://wiki.zulip.net/wiki/Testing_the_app for more information
+# on how to use remote debugging
+#
+
+os.environ["TORNADO_SERVER"] = "http://127.0.0.1:9983"
+
+usage = """%prog [options]
+    test-js-with-casper # Run all test files
+    test-js-with-casper 09-navigation.js # Run a single test file
+    test-js-with-casper 01-login.js 03-narrow.js # Run a few test files"""
+parser = optparse.OptionParser(usage)
+
+parser.add_option('--remote-debug',
+                  help='Whether or not to enable remote debugging on port 7777',
+                  action="store_true",
+                  default=False)
+(options, args) = parser.parse_args()
+
+os.chdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
+
+subprocess.check_call('tools/setup/generate-test-credentials')
+
+subprocess.check_call(['rm', '-f'] + glob.glob('/tmp/casper-failure*.png'))
+
+subprocess.check_call(['mkdir', '-p', 'var/casper'])
+
+log = open('var/casper/server.log', 'w')
+
+def assert_server_running(server):
+    # type: (subprocess.Popen) -> None
+    """Get the exit code of the server, or None if it is still running."""
+    if server.poll() is not None:
+        raise RuntimeError('Server died unexpectedly! Check var/casper/server.log')
+
+def server_is_up(server):
+    # type: (subprocess.Popen) -> bool
+    assert_server_running(server)
+    try:
+        # We could get a 501 error if the reverse proxy is up but the Django app isn't.
+        return requests.get('http://127.0.0.1:9981/accounts/home').status_code == 200
+    except:
+        return False
+
+def run_tests(files):
+    # type: (Iterable[str]) -> None
+    test_files = []
+    for file in files:
+        if not os.path.exists(file):
+            file = os.path.join(os.path.dirname(__file__), '../frontend_tests/casper_tests', file)
+        test_files.append(os.path.abspath(file))
+
+    subprocess.check_call('tools/setup/generate-fixtures')
+
+    remote_debug = ""
+    if options.remote_debug:
+        remote_debug = "--remote-debugger-port=7777 --remote-debugger-autorun=yes"
+
+    cmd = "frontend_tests/casperjs/bin/casperjs %s test " % (remote_debug,)
+    if test_files:
+        cmd += ' '.join(test_files)
+    else:
+        cmd += 'frontend_tests/casper_tests'
+
+    # Run this not through the shell, so that we have the actual PID.
+    server = subprocess.Popen(('tools/run-dev.py', '--test'),
+                              stdout=log, stderr=log)
+
+    ret = 1
+
+    try:
+        # Wait for the server to start up.
+        sys.stdout.write('Waiting for test server')
+        while not server_is_up(server):
+            sys.stdout.write('.')
+            sys.stdout.flush()
+            time.sleep(0.1)
+        sys.stdout.write('\n')
+
+        print("Running %s" % (cmd,))
+        ret = subprocess.call(cmd, shell=True)
+    finally:
+        assert_server_running(server)
+        server.terminate()
+
+    if ret != 0:
+        print("""
+Oops, the frontend tests failed. Tips for debugging:
+ * Check the frontend test server logs at var/casper/server.log
+ * Check the screenshots of failed tests at /tmp/casper-failure*.png
+ * Try remote debugging the test web browser as described in docs/testing.rst
+""", file=sys.stderr)
+
+        sys.exit(ret)
+
+run_tests(args)
+sys.exit(0)

@@ -1,0 +1,41 @@
+{{#with user}}
+<tr class="user_row" id="user_{{email}}">
+  <td>
+    <span class="user_name">{{full_name}}</span>
+  </td>
+  <td>
+    <span class="email">{{email}}</span>
+  </td>
+  {{#if is_bot}}
+    <td>
+      <span class="owner">{{bot_owner}}</span>
+    </td>
+  {{/if}}
+  <td>
+    {{#if is_active}}
+      <button class="button deactivate btn-danger">
+        {{t "Deactivate" }}
+      </button>
+    {{else}}
+      <button class="button reactivate btn-warning">
+        {{t "Reactivate" }}
+      </button>
+    {{/if}}
+    <span class="user-admin-settings">
+      {{#if is_active_human}}
+        {{#if is_admin}}
+          <button class="button remove-admin btn-danger">
+            {{t "Remove admin" }}
+          </button>
+        {{else}}
+          <button class="button make-admin btn-warning">
+            {{t "Make admin" }}
+          </button>
+        {{/if}}
+      {{/if}}
+    </span>
+    <div class='admin-user-status'>
+    </div>
+  </td>
+</tr>
+{{/with}}
