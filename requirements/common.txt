@@ -133,7 +133,7 @@ tornado==3.2.2
 typing==3.5.2.2
 
 # Fast JSON parser
-ujson==1.35
+ujson==5.2.0
 
 uritemplate==0.6
 
