@@ -24,7 +24,7 @@ backports-abc==0.4
 # Needed for S3 file uploads
 boto==2.42.0
 
-certifi==2016.8.31
+certifi==2022.12.7
 chardet==2.3.0
 
 # Needed for integrations
